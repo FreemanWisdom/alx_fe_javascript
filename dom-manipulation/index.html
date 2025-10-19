@@ -1,42 +1,131 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <title>Dynamic Quote Generator</title>
-  <style>
-    /* minimal styles */
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    #quoteDisplay { border: 1px solid #ccc; padding: 16px; min-height: 60px; margin-bottom: 12px; }
-    #controls > * { margin-right: 8px; margin-bottom: 8px; }
-    #quoteList { margin-top: 12px; }
-    .notification { padding: 8px; margin-top:8px; border-radius:4px; }
-    .notif-info { background:#eef; border:1px solid #cce; }
-    .notif-warn { background:#ffe; border:1px solid #eec; }
-  </style>
-</head>
-<body>
-  <h1>Dynamic Quote Generator</h1>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>Dynamic Quote Generator</title>
+    <style>
+      /* minimal styles */
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      #quoteDisplay {
+        border: 1px solid #ccc;
+        padding: 16px;
+        min-height: 60px;
+        margin-bottom: 12px;
+      }
+      #controls > * {
+        margin-right: 8px;
+        margin-bottom: 8px;
+      }
+      #quoteList {
+        margin-top: 12px;
+      }
+      .notification {
+        padding: 8px;
+        margin-top: 8px;
+        border-radius: 4px;
+      }
+      .notif-info {
+        background: #eef;
+        border: 1px solid #cce;
+      }
+      .notif-warn {
+        background: #ffe;
+        border: 1px solid #eec;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Dynamic Quote Generator</h1>
 
-  <div id="controls">
-    <select id="categoryFilter">
-      <option value="all">All Categories</option>
-    </select>
+    <div id="controls">
+      <select id="categoryFilter">
+        <option value="all">All Categories</option>
+      </select>
 
-    <button id="newQuote">Show New Quote</button>
-    <button id="exportJson">Export JSON</button>
-    <input type="file" id="importFile" accept=".json" />
-    <button id="syncNow">Sync Now</button>
-  </div>
+      <button id="newQuote">Show New Quote</button>
+      <button id="exportJson">Export JSON</button>
+      <input type="file" id="importFile" accept=".json" />
+      <button id="syncNow">Sync Now</button>
+    </div>
 
-  <div id="quoteDisplay" aria-live="polite"></div>
+    <div id="quoteDisplay" aria-live="polite"></div>
 
-  <div id="addQuoteContainer"></div>
+    <div id="addQuoteContainer"></div>
 
-  <div id="quoteList"></div>
+    <div id="quoteList"></div>
 
-  <div id="notification"></div>
+    <div id="notification"></div>
 
-  <script src="script.js"></script>
-</body>
+    <script src="script.js"></script>
+
+    <!-- add: ensure export/import functions exist and wire events -->
+    <script>
+      // Export quotes from localStorage key used by the app (falls back to entire localStorage if needed)
+      function exportToJsonFile() {
+        try {
+          const key = "dmq_quotes_v1";
+          const data = localStorage.getItem(key) || JSON.stringify([]);
+          const blob = new Blob([data], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "quotes.json";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        } catch (err) {
+          alert("Export failed: " + err.message);
+        }
+      }
+
+      // Import quotes from a selected JSON file and merge into localStorage under the same key
+      function importFromJsonFile(event) {
+        const file =
+          event.target && event.target.files && event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          try {
+            const imported = JSON.parse(e.target.result);
+            if (!Array.isArray(imported))
+              throw new Error("JSON must be an array of quotes");
+            const key = "dmq_quotes_v1";
+            let current = [];
+            try {
+              current = JSON.parse(localStorage.getItem(key) || "[]");
+            } catch {}
+            // Simple merge: append imported items (caller app may handle dedup/merge further)
+            const merged = current.concat(imported);
+            localStorage.setItem(key, JSON.stringify(merged));
+            alert("Quotes imported successfully.");
+            // Trigger a storage event for same-page listeners (optional)
+            if (typeof window.dispatchEvent === "function") {
+              window.dispatchEvent(new Event("storage"));
+            }
+          } catch (err) {
+            alert("Import failed: " + err.message);
+          } finally {
+            // reset input so same file can be selected again if needed
+            if (event.target) event.target.value = "";
+          }
+        };
+        reader.readAsText(file);
+      }
+
+      // Wire UI elements if present
+      document.addEventListener("DOMContentLoaded", function () {
+        const exportBtn = document.getElementById("exportJson");
+        if (exportBtn) exportBtn.addEventListener("click", exportToJsonFile);
+
+        const importInput = document.getElementById("importFile");
+        if (importInput)
+          importInput.addEventListener("change", importFromJsonFile);
+      });
+    </script>
+  </body>
 </html>
