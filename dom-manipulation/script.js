@@ -229,6 +229,11 @@
     URL.revokeObjectURL(url);
   }
 
+  // add: wrapper with requested name
+  function exportToJsonFile() {
+    exportToJson();
+  }
+
   function importFromJsonFile(event) {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
@@ -345,9 +350,9 @@
     document
       .getElementById("categoryFilter")
       .addEventListener("change", filterQuotes);
-    document
-      .getElementById("exportJson")
-      .addEventListener("click", exportToJson);
+    // wire export button to the exported wrapper name
+    const exportBtn = document.getElementById("exportJson");
+    if (exportBtn) exportBtn.addEventListener("click", exportToJsonFile);
     document
       .getElementById("importFile")
       .addEventListener("change", importFromJsonFile);
@@ -372,6 +377,9 @@
   window.filterQuotes = filterQuotes;
   window.populateCategories = populateCategories;
   window.syncWithServer = syncWithServer;
+  // expose import/export by requested names
+  window.exportToJsonFile = exportToJsonFile;
+  window.importFromJsonFile = importFromJsonFile;
 
   // start
   document.addEventListener("DOMContentLoaded", init);
