@@ -45,6 +45,8 @@
   const FILTER_KEY = "dmq_last_filter";
   const LAST_VIEWED_KEY = "dmq_last_viewed";
 
+  let selectedCategory = "all"; // Track current category filter
+
   // Storage
   function saveQuotes() {
     localStorage.setItem(LOCAL_KEY, JSON.stringify(quotes));
@@ -61,7 +63,6 @@
   // UI helpers
   function populateCategories() {
     const sel = document.getElementById("categoryFilter");
-    const last = localStorage.getItem(FILTER_KEY) || "all";
     const cats = Array.from(
       new Set(quotes.map((q) => q.category).filter(Boolean))
     ).sort();
@@ -72,7 +73,13 @@
       opt.textContent = c;
       sel.appendChild(opt);
     });
-    sel.value = last;
+
+    // Restore last selected category
+    const lastCategory = localStorage.getItem("lastSelectedCategory");
+    if (lastCategory) {
+      sel.value = lastCategory;
+      selectedCategory = lastCategory;
+    } else sel.value = "all";
   }
 
   function displayQuote(q) {
@@ -95,14 +102,17 @@
     sessionStorage.setItem(LAST_VIEWED_KEY, q.id);
   }
 
-  function displayQuotesList(filtered) {
+  function displayQuotesList(quotes) {
+    const filteredQuotes = filterQuotesByCategory(quotes);
     const list = document.getElementById("quoteList");
     list.innerHTML = "";
-    if (!filtered.length) {
-      list.innerHTML = "<em>No quotes in this category.</em>";
+
+    if (filteredQuotes.length === 0) {
+      list.innerHTML = "<p>No quotes found in this category</p>";
       return;
     }
-    filtered.forEach((q) => {
+
+    filteredQuotes.forEach((q) => {
       const div = document.createElement("div");
       div.style.borderTop = "1px solid #eee";
       div.style.padding = "8px 0";
@@ -143,6 +153,18 @@
       div.appendChild(btnDelete);
       list.appendChild(div);
     });
+  }
+
+  function filterQuotesByCategory(quotes) {
+    if (selectedCategory === "all") return quotes;
+    return quotes.filter((quote) => quote.category === selectedCategory);
+  }
+
+  function updateCategoryFilter() {
+    const select = document.getElementById("categoryFilter");
+    selectedCategory = select.value;
+    localStorage.setItem("lastSelectedCategory", selectedCategory);
+    displayQuotesList(filterQuotesByCategory(quotes));
   }
 
   // Core functions
@@ -349,7 +371,7 @@
       .addEventListener("click", showRandomQuote);
     document
       .getElementById("categoryFilter")
-      .addEventListener("change", filterQuotes);
+      .addEventListener("change", updateCategoryFilter);
     // wire export button to the exported wrapper name
     const exportBtn = document.getElementById("exportJson");
     if (exportBtn) exportBtn.addEventListener("click", exportToJsonFile);
