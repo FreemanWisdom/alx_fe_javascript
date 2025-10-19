@@ -304,64 +304,86 @@
   }
 
   // Server sync simulation and conflict resolution (server takes precedence)
-  const REMOTE_URL = "https://jsonplaceholder.typicode.com/posts?_limit=5";
-  async function fetchRemoteQuotes() {
+  const API_URL = "https://jsonplaceholder.typicode.com";
+  let lastSyncTime = 0;
+
+  async function fetchQuotesFromServer() {
     try {
-      const res = await fetch(REMOTE_URL);
-      if (!res.ok) throw new Error("Network error");
-      const posts = await res.json();
-      // map to quote-like objects; use remote-{id} to avoid id collisions
-      return posts.map((p) => ({
-        id: "remote-" + p.id,
-        text: (p.title || "").trim() || (p.body || "").slice(0, 80),
-        category: "remote",
-        lastModified: now(),
+      const response = await fetch(`${API_URL}/posts?_limit=5`);
+      if (!response.ok) throw new Error("Network response was not ok");
+
+      const posts = await response.json();
+      return posts.map((post) => ({
+        id: `server-${post.id}`,
+        text: post.title,
+        category: "server",
+        lastModified: Date.now(),
       }));
-    } catch (e) {
-      notify("Failed to fetch remote: " + e.message, "warn");
+    } catch (error) {
+      notify("Failed to fetch from server: " + error.message, "warn");
       return [];
     }
   }
 
-  async function syncWithServer(manual = false) {
-    const remote = await fetchRemoteQuotes();
-    if (!remote.length) {
-      if (manual) notify("No remote data found.");
-      return;
-    }
-    let mergedCount = 0,
-      conflictsResolved = 0;
-    const mapLocal = new Map(quotes.map((q) => [q.id, q]));
-    remote.forEach((rq) => {
-      const local = mapLocal.get(rq.id);
-      if (!local) {
-        quotes.push(rq);
-        mergedCount++;
-      } else if (
-        local.lastModified !== rq.lastModified &&
-        JSON.stringify(local) !== JSON.stringify(rq)
-      ) {
-        // conflict: prefer server (rq)
-        const idx = quotes.findIndex((x) => x.id === rq.id);
-        if (idx >= 0) {
-          quotes[idx] = rq;
-          conflictsResolved++;
-        }
-      }
-    });
-    if (mergedCount || conflictsResolved) {
-      saveQuotes();
-      populateCategories();
-      filterQuotes();
-      notify(
-        `Sync complete. Merged: ${mergedCount}, Conflicts resolved: ${conflictsResolved}`
-      );
-    } else if (manual) {
-      notify("Sync complete. No changes.");
+  async function postQuoteToServer(quote) {
+    try {
+      const response = await fetch(`${API_URL}/posts`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: quote.text,
+          body: quote.category,
+          userId: 1,
+        }),
+        headers: {
+          "Content-type": "application/json",
+        },
+      });
+      if (!response.ok) throw new Error("Failed to post");
+      notify("Quote synced to server");
+      return true;
+    } catch (error) {
+      notify("Failed to post to server: " + error.message, "warn");
+      return false;
     }
   }
 
-  // Initialization & event wiring
+  async function syncQuotes() {
+    const serverQuotes = await fetchQuotesFromServer();
+    if (!serverQuotes.length) return;
+
+    let conflicts = 0;
+    let additions = 0;
+
+    // Compare and merge server quotes with local quotes
+    serverQuotes.forEach((serverQuote) => {
+      const localQuote = quotes.find((q) => q.id === serverQuote.id);
+      if (!localQuote) {
+        quotes.push(serverQuote);
+        additions++;
+      } else if (serverQuote.lastModified > localQuote.lastModified) {
+        Object.assign(localQuote, serverQuote);
+        conflicts++;
+      }
+    });
+
+    if (additions || conflicts) {
+      saveQuotes();
+      notify(`Sync complete. Added: ${additions}, Updated: ${conflicts}`);
+      displayQuotesList(quotes);
+    }
+
+    lastSyncTime = Date.now();
+  }
+
+  function startPeriodicSync() {
+    // Sync every 30 seconds
+    setInterval(syncQuotes, 30000);
+
+    // Initial sync
+    syncQuotes();
+  }
+
+  // Update init function
   function init() {
     loadQuotes();
     populateCategories();
@@ -378,9 +400,11 @@
     document
       .getElementById("importFile")
       .addEventListener("change", importFromJsonFile);
-    document
-      .getElementById("syncNow")
-      .addEventListener("click", () => syncWithServer(true));
+    document.getElementById("syncNow").addEventListener("click", () => {
+      notify("Manual sync started...");
+      syncQuotes();
+    });
+
     // restore last viewed from session if present
     const lastViewedId = sessionStorage.getItem(LAST_VIEWED_KEY);
     if (lastViewedId) {
@@ -391,6 +415,7 @@
     filterQuotes();
     // periodic sync every 60 seconds
     setInterval(() => syncWithServer(false), 60000);
+    startPeriodicSync();
   }
 
   // Expose functions for debugging (optional)
