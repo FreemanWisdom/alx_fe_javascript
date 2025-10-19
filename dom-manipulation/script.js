@@ -303,15 +303,15 @@
     reader.readAsText(file);
   }
 
-  // Server sync simulation and conflict resolution (server takes precedence)
-  const API_URL = "https://jsonplaceholder.typicode.com";
-  let lastSyncTime = 0;
+  // Mock API endpoints
+  const API_URL = "https://jsonplaceholder.typicode.com/posts";
+  let lastSyncTimestamp = 0;
 
-  async function fetchQuotesFromServer() {
+  // Server interaction functions
+  async function fetchFromServer() {
     try {
-      const response = await fetch(`${API_URL}/posts?_limit=5`);
+      const response = await fetch(`${API_URL}?_limit=5`);
       if (!response.ok) throw new Error("Network response was not ok");
-
       const posts = await response.json();
       return posts.map((post) => ({
         id: `server-${post.id}`,
@@ -320,26 +320,23 @@
         lastModified: Date.now(),
       }));
     } catch (error) {
-      notify("Failed to fetch from server: " + error.message, "warn");
+      notify("Server fetch failed: " + error.message, "warn");
       return [];
     }
   }
 
-  async function postQuoteToServer(quote) {
+  async function postToServer(quote) {
     try {
-      const response = await fetch(`${API_URL}/posts`, {
+      const response = await fetch(API_URL, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: quote.text,
           body: quote.category,
           userId: 1,
         }),
-        headers: {
-          "Content-type": "application/json",
-        },
       });
-      if (!response.ok) throw new Error("Failed to post");
-      notify("Quote synced to server");
+      if (!response.ok) throw new Error("Post failed");
       return true;
     } catch (error) {
       notify("Failed to post to server: " + error.message, "warn");
@@ -347,76 +344,52 @@
     }
   }
 
+  // Sync and conflict resolution
   async function syncQuotes() {
-    const serverQuotes = await fetchQuotesFromServer();
+    notify("Syncing with server...", "info");
+    const serverQuotes = await fetchFromServer();
+
     if (!serverQuotes.length) return;
 
+    let updates = 0;
     let conflicts = 0;
-    let additions = 0;
 
-    // Compare and merge server quotes with local quotes
     serverQuotes.forEach((serverQuote) => {
       const localQuote = quotes.find((q) => q.id === serverQuote.id);
+
       if (!localQuote) {
         quotes.push(serverQuote);
-        additions++;
+        updates++;
       } else if (serverQuote.lastModified > localQuote.lastModified) {
+        // Server version is newer
         Object.assign(localQuote, serverQuote);
         conflicts++;
       }
     });
 
-    if (additions || conflicts) {
+    if (updates || conflicts) {
       saveQuotes();
-      notify(`Sync complete. Added: ${additions}, Updated: ${conflicts}`);
+      notify(`Sync complete. New: ${updates}, Updated: ${conflicts}`);
       displayQuotesList(quotes);
     }
 
-    lastSyncTime = Date.now();
+    lastSyncTimestamp = Date.now();
   }
 
-  function startPeriodicSync() {
-    // Sync every 30 seconds
-    setInterval(syncQuotes, 30000);
+  // Update init function to include sync setup
+  const originalInit = init;
+  init = function () {
+    originalInit();
+
+    // Add sync button handler
+    document.getElementById("syncNow").addEventListener("click", syncQuotes);
+
+    // Start periodic sync (every 60 seconds)
+    setInterval(syncQuotes, 60000);
 
     // Initial sync
     syncQuotes();
-  }
-
-  // Update init function
-  function init() {
-    loadQuotes();
-    populateCategories();
-    createAddQuoteForm();
-    document
-      .getElementById("newQuote")
-      .addEventListener("click", showRandomQuote);
-    document
-      .getElementById("categoryFilter")
-      .addEventListener("change", updateCategoryFilter);
-    // wire export button to the exported wrapper name
-    const exportBtn = document.getElementById("exportJson");
-    if (exportBtn) exportBtn.addEventListener("click", exportToJsonFile);
-    document
-      .getElementById("importFile")
-      .addEventListener("change", importFromJsonFile);
-    document.getElementById("syncNow").addEventListener("click", () => {
-      notify("Manual sync started...");
-      syncQuotes();
-    });
-
-    // restore last viewed from session if present
-    const lastViewedId = sessionStorage.getItem(LAST_VIEWED_KEY);
-    if (lastViewedId) {
-      const q = quotes.find((x) => x.id === lastViewedId);
-      if (q) displayQuote(q);
-      else showRandomQuote();
-    } else showRandomQuote();
-    filterQuotes();
-    // periodic sync every 60 seconds
-    setInterval(() => syncWithServer(false), 60000);
-    startPeriodicSync();
-  }
+  };
 
   // Expose functions for debugging (optional)
   window.showRandomQuote = showRandomQuote;
