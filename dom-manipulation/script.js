@@ -376,27 +376,31 @@
     lastSyncTimestamp = Date.now();
   }
 
-  // Update init function to include sync setup
-  const originalInit = init;
-  init = function () {
-    originalInit();
-
-    // Add sync button handler
+  // Initialize the application
+  function init() {
+    loadQuotes();
+    createAddQuoteForm();
+    populateCategories();
+    filterQuotes();
+    
+    // Set up event listeners
+    document.getElementById("newQuote").addEventListener("click", showRandomQuote);
+    document.getElementById("categoryFilter").addEventListener("change", updateCategoryFilter);
     document.getElementById("syncNow").addEventListener("click", syncQuotes);
-
+    
     // Start periodic sync (every 60 seconds)
     setInterval(syncQuotes, 60000);
-
+    
     // Initial sync
     syncQuotes();
-  };
+  }
 
   // Expose functions for debugging (optional)
   window.showRandomQuote = showRandomQuote;
   window.addQuote = (t, c) => addQuote(t, c);
   window.filterQuotes = filterQuotes;
   window.populateCategories = populateCategories;
-  window.syncWithServer = syncWithServer;
+  window.syncQuotes = syncQuotes;
   // expose import/export by requested names
   window.exportToJsonFile = exportToJsonFile;
   window.importFromJsonFile = importFromJsonFile;
